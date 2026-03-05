@@ -1,4 +1,4 @@
-name: Build TWRP 32-bit (Final Fix)
+name: Manual TWRP Build 32-bit
 on:
   workflow_dispatch:
 
@@ -6,16 +6,38 @@ jobs:
   build:
     runs-on: ubuntu-20.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: Cleanup Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /usr/local/lib/android
+          sudo apt-get clean
 
-      - name: Build Recovery
-        uses: shrp-project/action-shrp-builder@main
+      - name: Install Build Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc build-essential zip curl libc6-dev libncurses5-dev libssl-dev flex bison gperf adb repo
+
+      - name: Sync TWRP Source
+        run: |
+          mkdir ~/twrp && cd ~/twrp
+          repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git -b twrp-9.0
+          repo sync -j$(nproc) --force-sync
+
+      - name: Clone Your Device Tree
+        run: |
+          cd ~/twrp
+          git clone https://github.com/ssmm875/twrp_device_m7332..git device/mediatek/m7332
+
+      - name: Start Compilation
+        run: |
+          cd ~/twrp
+          export ALLOW_MISSING_DEPENDENCIES=true
+          . build/envsetup.sh
+          lunch omni_m7332-eng
+          mka recoveryimage -j$(nproc)
+
+      - name: Upload Result
+        uses: actions/upload-artifact@v4
         with:
-          manifest_url: https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git
-          manifest_branch: twrp-9.0
-          DEVICE_TREE: https://github.com/ssmm875/twrp_device_m7332.
-          DEVICE_NAME: m7332
-          MAKEFILE_NAME: omni_m7332
-          BUILD_TARGET: recovery
+          name: TWRP-Recovery-m7332
+          path: ~/twrp/out/target/product/m7332/recovery.img
 
